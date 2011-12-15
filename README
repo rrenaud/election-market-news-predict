@@ -4,4 +4,17 @@ http://www.cs.columbia.edu/~kathy/cs4701/documents/ReadingtheMarkets-ai.pdf
 http://www.seas.upenn.edu/~cse400/CSE400_2006_2007/GilderLerman/poster.pdf
 http://www.cs.jhu.edu/~mdredze/publications/markets_coling08.pdf
 
+Software requirements:
+
+market prediction:
+         
+numpy
+vw - https://github.com/JohnLangford/vowpal_wabbit/wiki
+
+scraping:
+
 To run the searches, you need a yahoo BOSS account.
+
+nltk - http://www.nltk.org/
+w3m 
+
