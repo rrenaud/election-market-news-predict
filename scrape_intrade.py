@@ -9,7 +9,7 @@ CAND_TO_INTRADE_ID = {'gingrich': 654836,
                       'huntsman': 658927,
                       'paul': 669534,
                       'perry': 656777,
-                      'bachman': 745285,
+                      'bachmann': 745285,
                       'cain': 745220}
 
 for cand, intrade_id in CAND_TO_INTRADE_ID.iteritems():
