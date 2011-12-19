@@ -18,3 +18,5 @@ To run the searches, you need a yahoo BOSS account.
 nltk - http://www.nltk.org/
 w3m 
 
+model debug/sentence label server:
+webpy 
