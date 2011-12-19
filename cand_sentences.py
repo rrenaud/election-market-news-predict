@@ -14,6 +14,7 @@ TEXT_RESULTS_DIR = 'text_results/'
 SENTENCES_DIR = 'mult_sentences/'
 
 PUNCT_CHARS_RE = re.compile("[,\\.']")
+# The ugly escaped characters are bullets that w3m likes to use for lists.
 HEURISTIC_SPLITS = re.compile('\n{2}|[ ]{3}|\xe2\x80\xa2')
 
 def normalize_token(token):
@@ -26,23 +27,27 @@ def clean_sentence(sentence):
     return ' '.join(sentence.split()).strip()
 
 def hack_sentencize(contents, sent_tokenizer):
-    # like the nltk sentence splitter, but also split at double newlines.
+    # like the nltk sentence splitter, but also split at double 
+    # newlines and bullets, which w3m likes to leave around.
     for supposed_sentence in sent_tokenizer.tokenize(contents, sent_tokenizer):
         heuristic_splits = re.split(HEURISTIC_SPLITS, supposed_sentence)
         for sentence in heuristic_splits:
             if len(sentence) > 50 and len(sentence) < 500:
                 yield sentence
 
+def mentioned_cands(sentence):
+    seen_cands = set()
+    tokens = sentence.split()
+    for token in tokens:
+        norm_token = normalize_token(token)
+        if norm_token in candidate_info.candidate_last_names:
+            seen_cands.add(norm_token)
+    return seen_cands
+
 def extract_cand_sentences(contents, sent_tokenizer):
     ret = collections.defaultdict(set)
     for sentence in hack_sentencize(contents, sent_tokenizer):
-        tokens = sentence.split()
-        seen_cands = set()
-        for token in tokens:
-            norm_token = normalize_token(token)
-            if norm_token in candidate_info.candidate_last_names:
-                seen_cands.add(norm_token)
-        for cand in seen_cands:
+        for cand in mentioned_cands(sentence):
             ret[cand].add(clean_sentence(sentence))
     return ret
 
@@ -56,6 +61,7 @@ def extract_cand_sentences_in_files(files, sent_tokenizer):
     return ret
 
 def text_results_files_by_date():
+    """ Return a dictionary of lists of filenames, keys are dates """
     files_to_process = os.listdir(TEXT_RESULTS_DIR)
     files_by_date = collections.defaultdict(list)
     for fn in files_to_process:
@@ -64,6 +70,7 @@ def text_results_files_by_date():
 
 
 def grouped_sentence_files_by_date():
+    """ Return a dictionary of lists of filenames, keys are dates """
     sentence_files = os.listdir(SENTENCES_DIR)
     grouped_files = collections.defaultdict(set)
     def extract_date(fn):

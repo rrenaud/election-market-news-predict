@@ -8,11 +8,13 @@ import subprocess
 import time
 
 import numpy
+import simplejson as json
 import scikits.learn.svm
 
 import cand_sentences
 import date_util
 import intrade_data_parser
+import model_debug_info
 import vw_learner
 
 class FeatureIndexer:
@@ -106,7 +108,10 @@ class BasePredictor:
     def predict_contents(self, contents, vec=None):
         return self.predict_vec(self.encoder.encode_contents(contents, vec))
 
-class SvmPredictor:
+    def sparse_structure(self):
+        raise NotImplemented()
+
+class SvmPredictor(BasePredictor):
     def __init__(self, encoder, name):
         BasePredictor.__init__(self, encoder)
         self.learner = scikits.learn.svm.LinearSVC()
@@ -124,6 +129,9 @@ class SvmPredictor:
         self.learner.fit(numpy_vectors, numpy_labels)
 
     def real(self): return True
+
+    def sparse_structure(self):
+        return numpy.zeros(self.encoder.feature_indexer.num_features())
 
 class VorpalCandPricePredictor(BasePredictor):
     def __init__(self, encoder, name):
@@ -151,6 +159,9 @@ class VorpalCandPricePredictor(BasePredictor):
             if val != 0:
                 vw_vec.append('%d:%f' % (ind, val))
         return vw_vec
+
+    def sparse_structure(self):
+        return collections.defaultdict(float)
             
 def avg(l):
     return float(sum(l)) / len(l)
@@ -174,41 +185,40 @@ class EvaluationStats:
         self.profit_list.append(decision * actual)
 
         if self.learner.real():
-            doc_contents = self.doc_reader.get_doc_contents(cand, date)
-            sentences = [l for l in doc_contents]
-            output_fn = 'debug_output/%s.%s.%s.html' % (
-                cand, date, self.learner.name)
-            print 'writing debug output', output_fn
-            scored_sentences = []
-            for sentence in sentences:
-                prediction = self.learner.predict_contents(
-                    [sentence], collections.defaultdict(float))
-                scored_sentences.append((prediction, sentence))
+            pass
+            # self.dump_debug_info(prediction, actual, cand, date)
 
-            scored_sentences.sort()
-            output_file = open(output_fn, 'w')
-            output_file.write('<html>')
-            output_file.write('<meta http-equiv="Content-Type" '
-                              'content="text/html;charset=utf-8" />')
-            output_file.write('<head><title>%s %s %s</title></head>' %
-                              (cand, date, self.learner.name))
-            output_file.write('<body>')
-            output_file.write('prediction: %.4f<br>' % prediction)
-            output_file.write('actual: %.4f<br>' % actual)
-            output_file.write('<table>')
-            for score, sentence in scored_sentences:
-                output_file.write('<tr><td>%.4f</td><td>%s</td></tr>' %
-                                  (score * 100, sentence))
-            output_file.write('</table>')
-            output_file.write('</body>')
-            output_file.write('</html>')
-            output_file.close()
-            
     def accuracy(self):
         return avg(self.acc)
 
     def profit(self):
         return sum(self.profit_list)
+
+    def dump_debug_info(self, prediction, actual, cand, date):
+        doc_contents = self.doc_reader.get_doc_contents(cand, date)
+        sentences = [l for l in doc_contents]
+        output_fn = model_debug_info.debug_info_fn(
+            self.learner.name, cand, date)
+        output = open(output_fn, 'w')
+        print 'writing debug output', output_fn
+        scored_sentences = []
+        word_freqs = collections.defaultdict(int)
+        for sentence in sentences:
+            for word in tokenize_contents([sentence]):
+                word_freqs[word] += 1
+            prediction = self.learner.predict_contents(
+                [sentence], self.learner.sparse_structure())
+            scored_sentences.append((prediction, sentence))
+            
+        scored_words = []
+        for word in sorted(word_freqs):
+            pred = self.learner.predict_contents(
+                [word], self.learner.sparse_structure())
+            scored_words.append((pred, word))
+        json.dump({'scored_words' : scored_words,
+                   'scored_sentences': scored_sentences,
+                   'prediction': prediction,
+                   'actual': actual}, output)
 
 def precompute_feature_indexer_size(feature_indexer, grouped_sentence_files):
     # Just get the overall number of features in all of the training data,
@@ -225,8 +235,8 @@ def main():
     
     print 'reading sentences'
     grouped_sentence_files = cand_sentences.grouped_sentence_files_by_date()
-    #for k, v in grouped_sentence_files.iteritems():
-        #grouped_sentence_files[k] = [x for x in v if 'gingrich' in x]
+    for k, v in grouped_sentence_files.iteritems():
+        grouped_sentence_files[k] = [x for x in v if 'romney' in x]
     #while len(grouped_sentence_files) > 10:
     #    grouped_sentence_files.popitem()
 
@@ -241,11 +251,12 @@ def main():
                                               doc_reader)
     stopworded_trend_encoder3_10 = TrendingEncoder(stopworded_encoder, 3, 10)
     plain_trend_encoder3_10 = TrendingEncoder(plain_encoder, 3, 10)
-    learners = [#SvmPredictor(stopworded_encoder, 'stopword_svm'), 
-                #SvmPredictor(plain_encoder, 'plain_svm'),
-                #SvmPredictor(stopworded_trend_encoder3_10, 'stop_trend_3_10'),
-                #SvmPredictor(plain_trend_encoder3_10, 'plain_trend_3_10')
-        VorpalCandPricePredictor(stopworded_encoder, 'stop_vow_all')
+    learners = [
+        SvmPredictor(stopworded_encoder, 'stopword_svm'), 
+        #SvmPredictor(plain_encoder, 'plain_svm'),
+        #SvmPredictor(stopworded_trend_encoder3_10, 'stop_trend_3_10'),
+        SvmPredictor(plain_trend_encoder3_10, 'plain_trend_3_10'),
+        #VorpalCandPricePredictor(stopworded_encoder, 'stop_vow_all')
         ]
     for i in range(100):
         fake_learner = FakeLearner()
